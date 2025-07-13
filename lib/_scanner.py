@@ -2,8 +2,7 @@ import json as _json
 import fnmatch as _fnmatch
 import os as _os
 import pathlib as _pathlib
-import queue as _q
-import threading as _threading
+import concurrent.futures as _futures
 
 from . import _helpers
 
@@ -69,8 +68,7 @@ def _should_consider_file(
 
 class _TaskManager:
     def __init__(self, params: dict) -> None:
-        self._work_q = _q.Queue()
-        self._workers_to_deploy: int = 0
+        self._max_workers: int = 0
 
         self._path: str = params["path"]
         self._ignore_dirs: set[str] = params["ignore_dirs"]
@@ -149,30 +147,12 @@ class _TaskManager:
 
             except OSError as e:
                 target_bucket["__error__"] = str(e)
-
-    
-    def _worker(self, work_q: _q.Queue):
-        while True:
-            try:
-                params = work_q.get(timeout=1)
-            except _q.Empty:
-                continue
-
-            if not params["path"]:
-                work_q.task_done()
-                return
-            
-            path = params["path"]
-            params["bucket"]["__path__"] = path
-            params["bucket"]["__files__"] = []
-
-            self._crawl_dir(params["bucket"])
-
-            work_q.task_done()
+        
+        print("Crawl finished", out_bucket["__path__"])
     
     @property
     def workers_deployed(self) -> int:
-        return self._workers_to_deploy
+        return self._max_workers
     
     def begin_scan(self) -> dict:
         result_bucket: dict = self.skim_dir(self._path)
@@ -181,31 +161,24 @@ class _TaskManager:
             return result_bucket
 
         root_width = 0
-        for key, value in result_bucket.items():
+        for _, value in result_bucket.items():
             if isinstance(value, dict):
-                self._work_q.put(
-                    {
-                        "path": value["__path__"],
-                        "bucket": result_bucket[key],
-                    },
-                )
                 root_width += 1
 
-        self._workers_to_deploy = min(root_width, _MAX_WORKERS)
-        threads = [
-            _threading.Thread(target=self._worker, args=(self._work_q,), daemon=True)
-            for _ in range(self._workers_to_deploy)
-        ]
-        for t in threads:
-            t.start()
+        self._max_workers = min(root_width, _MAX_WORKERS)
 
-        self._work_q.join()
+        with _futures.ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+            futures = [
+                executor.submit(self._crawl_dir, value)
+                for _, value in result_bucket.items()
+                if isinstance(value, dict)
+            ]
+        
+            _futures.wait(futures, return_when=_futures.FIRST_EXCEPTION)
 
-        # trigger kill switch so the workers exit
-        for _ in threads:
-            self._work_q.put({"path": None})
-        for t in threads:
-            t.join()
+            for f in futures:
+                if exc := f.exception():
+                    raise exc
 
         return result_bucket
 
@@ -215,7 +188,6 @@ class Scanner:
         if not directory.startswith("~"):
             if not directory.startswith("/"):
                 directory = "~/" + directory
-        
 
         self._root_path = _pathlib.Path(directory).expanduser()
         self._scan_result: dict[str, str | list[str] | dict] = {}

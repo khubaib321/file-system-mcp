@@ -10,14 +10,14 @@ def time_it() -> Callable:
     def decorator(func):
         @_ft.wraps(func)
         def wrapper(*args, **kwargs):
-            print(f"⏱️ {func.__name__}(): ", end="", flush=True)
+            print(f"⏱️ {func.__name__}()", flush=True)
 
             start_time = _time.time()
             result = func(*args, **kwargs)
             end_time = _time.time()
             
             execution_time = end_time - start_time
-            print(f"{execution_time:.3f} seconds", flush=True)
+            print(f"⏱️ {func.__name__}() took {execution_time:.3f} seconds.", flush=True)
             
             return result
 

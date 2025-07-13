@@ -22,7 +22,7 @@ def main():
             "scan_hidden_files": True,
             "output_file_name": "files",
             "search_file_names": set([
-                "invoice",
+                "scan",
             ]),
             "search_file_extensions": set([
                 "pdf",
