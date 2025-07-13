@@ -149,7 +149,7 @@ class _TaskManager:
             except OSError as e:
                 target_bucket["__error__"] = str(e)
         
-        print("Crawl finished", out_bucket["__path__"])
+        print("Crawl finished", out_bucket["__path__"], "✅", flush=True)
     
     @property
     def workers_deployed(self) -> int:
