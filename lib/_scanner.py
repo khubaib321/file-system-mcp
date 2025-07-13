@@ -1,5 +1,6 @@
 import json as _json
 import fnmatch as _fnmatch
+from logging import root
 import os as _os
 import pathlib as _pathlib
 import concurrent.futures as _futures
@@ -164,6 +165,9 @@ class _TaskManager:
         for _, value in result_bucket.items():
             if isinstance(value, dict):
                 root_width += 1
+        
+        if root_width == 0:
+            return result_bucket
 
         self._max_workers = min(root_width, _MAX_WORKERS)
 
